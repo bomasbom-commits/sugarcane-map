@@ -2,30 +2,74 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ระบบแผนที่แปลงอ้อยรถตัด - Tree View Hierarchy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบแผนที่แปลงเกษตร</title>
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', Tahoma, 'Sarabun', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+    body { font-family: 'Segoe UI', Tahoma, 'Sarabun', sans-serif; display: flex; height: 100vh; width: 100vw; overflow: hidden; position: relative; }
+
+    /* ปุ่มเมนูสำหรับเปิดบนมือถือ */
+    .mobile-menu-btn {
+      display: none;
+      position: absolute;
+      top: 12px;
+      left: 55px;
+      z-index: 1100;
+      background: #1565C0;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+      cursor: pointer;
+    }
+
+    /* ฉากหลังทึบเมื่อเปิดเมนูในมือถือ */
+    .sidebar-overlay {
+      display: none;
+      position: absolute;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0,0,0,0.4);
+      z-index: 1999;
+    }
 
     /* แผง Sidebar */
     #sidebar {
-      width: 400px;
+      width: 380px;
       height: 100%;
       background: #ffffff;
       box-shadow: 2px 0 10px rgba(0,0,0,0.15);
       display: flex;
       flex-direction: column;
-      z-index: 1000;
+      z-index: 2000;
+      transition: transform 0.3s ease;
     }
 
-    .sidebar-header { padding: 14px 16px; background: #1565C0; color: white; }
+    .sidebar-header {
+      padding: 14px 16px;
+      background: #1565C0;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
     .sidebar-header h2 { font-size: 16px; font-weight: 600; }
     .sidebar-header p { font-size: 11px; opacity: 0.85; margin-top: 2px; }
+    .btn-close-sidebar {
+      display: none;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+    }
 
     .sidebar-content {
       flex: 1;
@@ -36,7 +80,7 @@
       gap: 10px;
     }
 
-    /* กล่องความคืบหน้าการโหลด */
+    /* กล่องแจ้งสถานะโหลด */
     .progress-box {
       background: #E3F2FD;
       border: 1px solid #BBDEFB;
@@ -54,7 +98,7 @@
     .progress-bar-bg { width: 100%; height: 6px; background: #E0E0E0; border-radius: 3px; overflow: hidden; }
     .progress-bar-fill { height: 100%; width: 0%; background: #1976D2; transition: width 0.3s; }
 
-    /* ช่องค้นหา */
+    /* ค้นหา */
     .search-box { position: relative; }
     .search-input {
       width: 100%;
@@ -69,47 +113,36 @@
       position: absolute;
       top: 100%; left: 0; right: 0;
       background: white; border-radius: 6px;
-      max-height: 220px; overflow-y: auto;
+      max-height: 200px; overflow-y: auto;
       box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      display: none; z-index: 1002;
+      display: none; z-index: 2002;
     }
-    .search-item { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; font-size: 12px; }
+    .search-item { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; cursor: pointer; font-size: 12px; }
     .search-item:hover { background: #e3f2fd; }
 
-    /* โครงสร้าง Tree View */
+    /* Tree View */
     .tree-title { font-size: 13px; font-weight: bold; color: #37474f; margin-bottom: 6px; }
     .tree-root { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-
-    /* Level 1: ชุดกลุ่มหลัก (02, 11,15, 21,23 ...) */
     .root-node { border: 1px solid #d0d7de; border-radius: 6px; overflow: hidden; background: #fafbfc; }
     .root-header {
       padding: 8px 10px; background: #eef2f6; display: flex; align-items: center;
       justify-content: space-between; cursor: pointer; user-select: none; font-weight: 600; font-size: 13px;
     }
-    .root-header:hover { background: #e1e7ee; }
-
-    /* Level 2: รหัสกลุ่ม (รหัสกลุ่ม 11, รหัสกลุ่ม 15 ...) */
-    .main-list { list-style: none; display: none; padding: 3px 0 3px 12px; background: #ffffff; border-top: 1px solid #e0e0e0; }
+    .main-list { list-style: none; display: none; padding: 3px 0 3px 10px; background: #ffffff; border-top: 1px solid #e0e0e0; }
     .main-node { margin: 2px 0; }
     .main-header {
       padding: 6px 8px; display: flex; align-items: center; justify-content: space-between;
       cursor: pointer; font-size: 12.5px; font-weight: 500; border-radius: 4px;
     }
-    .main-header:hover { background: #f5f5f5; }
-
-    /* Level 3: กลุ่มย่อย (11_005, 11_003 ...) */
-    .sub-list { list-style: none; display: none; padding: 2px 0 2px 14px; }
+    .sub-list { list-style: none; display: none; padding: 2px 0 2px 12px; }
     .sub-node { margin: 2px 0; }
     .sub-header {
       padding: 5px 8px; display: flex; align-items: center; justify-content: space-between;
       cursor: pointer; font-size: 12px; border-radius: 4px;
     }
-    .sub-header:hover { background: #f0f4f8; }
-
-    /* Level 4: รายการแปลง (320504130065 ...) */
-    .plot-list { list-style: none; display: none; padding: 2px 0 2px 18px; }
+    .plot-list { list-style: none; display: none; padding: 2px 0 2px 16px; }
     .plot-item {
-      padding: 4px 8px; font-size: 11.5px; color: #1565c0; cursor: pointer; border-radius: 4px;
+      padding: 5px 8px; font-size: 12px; color: #1565c0; cursor: pointer; border-radius: 4px;
       display: flex; align-items: center; gap: 5px;
     }
     .plot-item:hover { background: #e3f2fd; color: #0d47a1; font-weight: 600; }
@@ -119,19 +152,45 @@
     .caret.open { transform: rotate(90deg); }
     .badge { background: #cfd8dc; color: #37474f; padding: 1px 6px; border-radius: 10px; font-size: 10.5px; font-weight: bold; }
 
-    #map { flex: 1; height: 100%; }
+    #map { flex: 1; height: 100%; width: 100%; }
+
+    /* CSS สำหรับหน้าจอมือถือ (ทั้งแนวตั้งและหน้าจอขนาดเล็ก) */
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: block; }
+      .btn-close-sidebar { display: block; }
+      #sidebar {
+        position: absolute;
+        top: 0; left: 0;
+        width: 82%;
+        max-width: 320px;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+      }
+      #sidebar.active {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+    }
   </style>
 </head>
 <body>
 
+  <!-- ปุ่มเปิดเมนูบนมือถือ -->
+  <button id="mobileMenuBtn" class="mobile-menu-btn">📂 รายการกลุ่ม / ค้นหา</button>
+  <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
   <div id="sidebar">
     <div class="sidebar-header">
-      <h2>แผนที่แปลงอ้อยรถตัด</h2>
-      <p></p>
+      <div>
+        <h2>ระบบแผนที่แปลงเกษตร</h2>
+        <p>ชุดกลุ่ม > รหัสกลุ่ม > กลุ่มย่อย > รหัสแปลง</p>
+      </div>
+      <button id="btnCloseSidebar" class="btn-close-sidebar">✕</button>
     </div>
 
     <div class="sidebar-content">
-      <!-- แสดงสถานะการโหลด -->
       <div id="progressContainer" class="progress-box">
         <div class="progress-text">
           <span id="progressLabel">กำลังเตรียมโหลด...</span>
@@ -142,13 +201,11 @@
         </div>
       </div>
 
-      <!-- ค้นหารหัสแปลง -->
       <div class="search-box">
         <input type="text" id="searchInput" class="search-input" placeholder="🔍 ค้นหารหัสแปลง เช่น 320504130065..." />
         <div id="searchDropdown" class="search-dropdown"></div>
       </div>
 
-      <!-- Tree View Container -->
       <div>
         <div class="tree-title">🗂️ โครงสร้างกลุ่มแปลง (<span id="totalPlotsCount">0</span> แปลง)</div>
         <ul id="treeContainer" class="tree-root"></ul>
@@ -163,7 +220,6 @@
   <script src="https://unpkg.com/@tmcw/togeojson"></script>
 
   <script>
-   // 1. ระบุรายชื่อไฟล์ KML ชี้เข้าโฟลเดอร์ กลุ่มรถตัด/data/
     const kmlConfigs = [
       { rootLabel: '02', file: 'กลุ่มรถตัด/data/group_02.kml' },
       { rootLabel: '11,15', file: 'กลุ่มรถตัด/data/group_11_15.kml' },
@@ -176,10 +232,10 @@
       { rootLabel: '63', file: 'กลุ่มรถตัด/data/group_63.kml' },
       { rootLabel: '64', file: 'กลุ่มรถตัด/data/group_64.kml' }
     ];
+
     const groupColors = ['#FF5722', '#4CAF50', '#2196F3', '#9C27B0', '#FF9800', '#00BCD4', '#E91E63', '#3F51B5', '#795548', '#009688'];
     const subColorMap = {};
 
-    // 2. ตั้งค่าแผนที่
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Esri World Imagery',
       maxZoom: 19
@@ -199,16 +255,35 @@
 
     L.control.layers({ "ภาพถ่ายดาวเทียม": satelliteLayer, "แผนที่ถนน": osmLayer }, null, { position: 'topright' }).addTo(map);
 
-    // โครงสร้างเก็บข้อมูล: { root: { mainGroup: { subGroup: [ plots ] } } }
     const treeData = {};
     const subGroupLayers = {}; 
     let searchIndex = [];
     const totalBounds = L.latLngBounds([]);
 
-    // 3. ฟังก์ชันสร้าง Popup
+    // ระบบ Drawer เปิด-ปิดเมนูบนมือถือ
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const btnOpen = document.getElementById('mobileMenuBtn');
+    const btnClose = document.getElementById('btnCloseSidebar');
+
+    function openMobileSidebar() {
+      sidebar.classList.add('active');
+      overlay.classList.add('active');
+    }
+
+    function closeMobileSidebar() {
+      sidebar.classList.remove('active');
+      overlay.classList.remove('active');
+      setTimeout(() => map.invalidateSize(), 300);
+    }
+
+    btnOpen.addEventListener('click', openMobileSidebar);
+    btnClose.addEventListener('click', closeMobileSidebar);
+    overlay.addEventListener('click', closeMobileSidebar);
+
     function createPopupContent(name, rootGroup, mainGroup, subGroup, color, props) {
-      let content = `<div style="font-size: 13px; line-height: 1.5; min-width: 210px;">`;
-      content += `<strong style="font-size: 15px; color: ${color};">📍 ${name}</strong><br/>`;
+      let content = `<div style="font-size: 13px; line-height: 1.5; min-width: 200px;">`;
+      content += `<strong style="font-size: 14px; color: ${color};">📍 ${name}</strong><br/>`;
       content += `<span style="font-size: 11.5px; color: #555;"><b>ชุด:</b> ${rootGroup} | <b>กลุ่ม:</b> ${mainGroup} | <b>กลุ่มย่อย:</b> ${subGroup}</span>`;
       content += `<hr style="margin: 6px 0; border: none; border-top: 1px solid #e0e0e0;"/>`;
 
@@ -227,12 +302,10 @@
         }
       }
       if (rows) content += `<table style="width:100%; font-size:12px; margin-top:4px;">${rows}</table>`;
-
       content += `</div>`;
       return content;
     }
 
-    // 4. แกะโครงสร้าง Folder จาก KML
     function parseKmlHierarchy(xmlDoc, rootLabel) {
       const geojson = toGeoJSON.kml(xmlDoc);
       const placemarks = xmlDoc.getElementsByTagName('Placemark');
@@ -252,7 +325,6 @@
           parent = parent.parentElement;
         }
 
-        // กำหนด mainGroup และ subGroup
         let mainGroup = folders.length > 0 ? folders[0] : `กลุ่ม ${rootLabel}`;
         let subGroup = folders.length > 1 ? folders[1] : (folders.length === 1 ? folders[0] : 'แปลงย่อย');
 
@@ -266,7 +338,6 @@
       return geojson;
     }
 
-    // 5. นำเข้าข้อมูลและจัดโครงสร้าง
     function processGeoJson(geojsonData, rootLabel) {
       if (!treeData[rootLabel]) treeData[rootLabel] = {};
 
@@ -319,7 +390,6 @@
       });
     }
 
-    // 6. เรนเดอร์ UI แบบ Tree View 4 ลำดับชั้น
     function buildHierarchyUI() {
       const container = document.getElementById('treeContainer');
       container.innerHTML = '';
@@ -329,7 +399,6 @@
         const mainGroups = treeData[rootLabel];
         let rootPlotCount = 0;
 
-        // Level 1: ชุดกลุ่มหลัก
         const rootLi = document.createElement('li');
         rootLi.className = 'root-node';
 
@@ -347,7 +416,6 @@
         const mainUl = document.createElement('ul');
         mainUl.className = 'main-list';
 
-        // Level 2: รหัสกลุ่ม
         Object.keys(mainGroups).forEach(mainGroup => {
           const subGroups = mainGroups[mainGroup];
           let mainPlotCount = 0;
@@ -369,7 +437,6 @@
           const subUl = document.createElement('ul');
           subUl.className = 'sub-list';
 
-          // Level 3: กลุ่มย่อย (11_005)
           Object.keys(subGroups).forEach(subGroup => {
             const plots = subGroups[subGroup];
             const color = subColorMap[subGroup];
@@ -390,10 +457,9 @@
                 <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${color};"></span>
                 <span>${subGroup}</span>
               </div>
-              <span class="badge" style="font-size:10px;">${plots.length} แปลง</span>
+              <span class="badge" style="font-size:10px;">${plots.length}</span>
             `;
 
-            // Level 4: รายการแปลง (320504130065)
             const plotUl = document.createElement('ul');
             plotUl.className = 'plot-list';
 
@@ -405,12 +471,12 @@
               plotLi.addEventListener('click', (e) => {
                 e.stopPropagation();
                 focusPlot(plot);
+                if (window.innerWidth <= 768) closeMobileSidebar();
               });
 
               plotUl.appendChild(plotLi);
             });
 
-            // Event ยุบ-ขยาย Level 3 -> Level 4
             subHeader.addEventListener('click', (e) => {
               if (e.target.tagName === 'INPUT') return;
               const isOpen = plotUl.style.display === 'block';
@@ -418,7 +484,6 @@
               subHeader.querySelector('.caret-sub').classList.toggle('open', !isOpen);
             });
 
-            // Checkbox Level 3
             subHeader.querySelector('.cb-sub').addEventListener('change', function () {
               if (this.checked) map.addLayer(subGroupLayers[layerKey]);
               else map.removeLayer(subGroupLayers[layerKey]);
@@ -429,9 +494,8 @@
             subUl.appendChild(subLi);
           });
 
-          mainHeader.querySelector('.badge-main').innerText = `${mainPlotCount} แปลง`;
+          mainHeader.querySelector('.badge-main').innerText = `${mainPlotCount}`;
 
-          // Event ยุบ-ขยาย Level 2 -> Level 3
           mainHeader.addEventListener('click', (e) => {
             if (e.target.tagName === 'INPUT') return;
             const isOpen = subUl.style.display === 'block';
@@ -439,7 +503,6 @@
             mainHeader.querySelector('.caret-main').classList.toggle('open', !isOpen);
           });
 
-          // Checkbox Level 2
           mainHeader.querySelector('.cb-main').addEventListener('change', function () {
             const checked = this.checked;
             subUl.querySelectorAll('.cb-sub').forEach(cb => {
@@ -455,9 +518,8 @@
           mainUl.appendChild(mainLi);
         });
 
-        rootHeader.querySelector('.badge-root').innerText = `${rootPlotCount} แปลง`;
+        rootHeader.querySelector('.badge-root').innerText = `${rootPlotCount}`;
 
-        // Event ยุบ-ขยาย Level 1 -> Level 2
         rootHeader.addEventListener('click', (e) => {
           if (e.target.tagName === 'INPUT') return;
           const isOpen = mainUl.style.display === 'block';
@@ -465,7 +527,6 @@
           rootHeader.querySelector('.caret').classList.toggle('open', !isOpen);
         });
 
-        // Checkbox Level 1
         rootHeader.querySelector('.cb-root').addEventListener('change', function () {
           const checked = this.checked;
           mainUl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -484,10 +545,8 @@
       });
 
       document.getElementById('totalPlotsCount').innerText = totalPlots;
-      document.getElementById('searchInput').placeholder = `🔍 ค้นหารหัสแปลง (${totalPlots} แปลง)...`;
     }
 
-    // 7. ฟังก์ชันซูมไปยังแปลง
     function focusPlot(plot) {
       const layer = plot.layer;
       const layerKey = plot.layerKey;
@@ -499,7 +558,7 @@
       }
 
       if (layer.getBounds && layer.getBounds().isValid()) {
-        map.fitBounds(layer.getBounds(), { padding: [60, 60], maxZoom: 18 });
+        map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 18 });
       } else if (layer.getLatLng) {
         map.setView(layer.getLatLng(), 18);
       }
@@ -514,7 +573,6 @@
       }
     }
 
-    // 8. ทยอยโหลดไฟล์แบบ Asynchronous
     async function loadAllKmlFiles() {
       const pLabel = document.getElementById('progressLabel');
       const pPercent = document.getElementById('progressPercent');
@@ -525,7 +583,7 @@
         const item = kmlConfigs[i];
         const pct = Math.round(((i + 1) / kmlConfigs.length) * 100);
 
-        pLabel.innerText = `กำลังโหลดชุด: ${item.rootLabel}`;
+        pLabel.innerText = `โหลด: ${item.rootLabel}`;
         pPercent.innerText = `${pct}%`;
         pBar.style.width = `${pct}%`;
 
@@ -548,17 +606,16 @@
         await new Promise(r => setTimeout(r, 15));
       }
 
-      pLabel.innerText = '✅ โหลดข้อมูลครบทุกชุดแล้ว';
+      pLabel.innerText = '✅ โหลดครบแล้ว';
       setTimeout(() => { pBox.style.display = 'none'; }, 1500);
 
       buildHierarchyUI();
 
       if (totalBounds.isValid()) {
-        map.fitBounds(totalBounds, { padding: [30, 30] });
+        map.fitBounds(totalBounds, { padding: [20, 20] });
       }
     }
 
-    // 9. ระบบค้นหา Real-time
     const searchInput = document.getElementById('searchInput');
     const searchDropdown = document.getElementById('searchDropdown');
 
@@ -575,7 +632,7 @@
       );
 
       if (matched.length === 0) {
-        searchDropdown.innerHTML = `<div class="search-item" style="color:#888;">ไม่พบข้อมูลรหัสแปลง</div>`;
+        searchDropdown.innerHTML = `<div class="search-item" style="color:#888;">ไม่พบรหัสแปลง</div>`;
         searchDropdown.style.display = 'block';
         return;
       }
@@ -588,6 +645,7 @@
           searchDropdown.style.display = 'none';
           searchInput.value = plot.name;
           focusPlot(plot);
+          if (window.innerWidth <= 768) closeMobileSidebar();
         });
         searchDropdown.appendChild(div);
       });
