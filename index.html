@@ -54,7 +54,12 @@
     .plot-item { padding: 5px 8px; font-size: 12px; color: #1565c0; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 5px; }
     .plot-item:hover { background: #e3f2fd; color: #0d47a1; font-weight: 600; }
     .node-left { display: flex; align-items: center; gap: 6px; }
-    .color-dot { display: inline-block; width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    
+    /* ปรับแต่งจุดสีให้กดคลิกได้และมีเอฟเฟกต์ตอบสนอง */
+    .color-dot { display: inline-block; width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; cursor: pointer; border: 1px solid rgba(0,0,0,0.2); transition: transform 0.1s; }
+    .color-dot:hover { transform: scale(1.2); }
+    .color-picker-input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+
     .caret { transition: transform 0.2s; font-size: 9px; color: #666; display: inline-block; width: 12px; }
     .caret.open { transform: rotate(90deg); }
     .badge { background: #e0e0e0; color: #37474f; padding: 1px 6px; border-radius: 10px; font-size: 10.5px; font-weight: bold; }
@@ -115,7 +120,7 @@
         <div class="tree-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">
           <span>🗂️ กลุ่มรถตัดทั้งหมด (<span id="totalPlotsCount">0</span> แปลง)</span>
           <div style="display: flex; gap: 4px; align-items: center;">
-            <button id="changeColorsBtn" style="cursor: pointer; font-size: 11px; background: #e8f5e9; padding: 4px 8px; border-radius: 4px; border: 1px solid #c8e6c9; color: #2e7d32; font-weight: 500;">🎨 เปลี่ยนสี</button>
+            <button id="changeColorsBtn" style="cursor: pointer; font-size: 11px; background: #e8f5e9; padding: 4px 8px; border-radius: 4px; border: 1px solid #c8e6c9; color: #2e7d32; font-weight: 500;">🎨 สลับสีทั้งหมด</button>
             <label style="cursor: pointer; font-size: 11px; font-weight: normal; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px solid #bbdefb; color: #0d47a1; display: inline-flex; align-items: center; gap: 4px; margin: 0;">
               <input type="checkbox" id="selectAllGroups" checked />
               <span id="selectAllText">เปิดทั้งหมด</span>
@@ -156,7 +161,6 @@
       'กลุ่ม_83.kml'
     ];
 
-    // ชุดสีสำรองหลากหลายชุด สำหรับสลับเปลี่ยนสีเมื่อกดปุ่ม
     const colorPalettes = [
       ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#43A047', '#FB8C00', '#F4511E', '#6D4C41', '#546E7A', '#00ACC1', '#D81B60', '#5E35B1', '#3949AB', '#7CB342', '#FDD835', '#00BCD4', '#9C27B0', '#E91E63', '#4CAF50', '#FF9800', '#00838F', '#283593', '#AD1457', '#C2185B', '#6A1B9A'],
       ['#FF5722', '#795548', '#607D8B', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#9E9E9E', '#795548', '#607D8B'],
@@ -165,6 +169,7 @@
     ];
     let currentPaletteIndex = 0;
     const subColorMap = {};
+    const subGroupPlotsMap = {}; // เก็บรายการแปลงแยกตาม subKey เพื่อใช้อัปเดตสีเฉพาะกลุ่มย่อย
 
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri World Imagery', maxZoom: 19 });
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OpenStreetMap', maxZoom: 19 });
@@ -283,7 +288,6 @@
         let plotName = props['รหัสแปลง'] || props.name || 'ไม่มีรหัส';
         if(plotName.includes('<td') || plotName.includes('<')) { plotName = 'แปลงไม่มีรหัส'; }
 
-        // 🟢 แยกสีอิสระตามแต่ละกลุ่มย่อย (subKey)
         const subKey = `${mainGroup}:::${subGroup}`;
         if (!subColorMap[subKey]) {
           const palette = colorPalettes[currentPaletteIndex];
@@ -310,11 +314,29 @@
         allLayerObjects.push(plotObj);
         searchIndex.push(plotObj);
 
+        if (!subGroupPlotsMap[subKey]) subGroupPlotsMap[subKey] = [];
+        subGroupPlotsMap[subKey].push(plotObj);
+
         if (layer.getBounds && layer.getBounds().isValid()) totalBounds.extend(layer.getBounds());
       });
     }
 
-    // ฟังก์ชันปุ่มกดสลับเปลี่ยนชุดสีกลุ่มย่อย
+    // ฟังก์ชันอัปเดตสีเฉพาะกลุ่มย่อยที่เลือก
+    function updateSubGroupColor(subKey, newColor) {
+      subColorMap[subKey] = newColor;
+      if (subGroupPlotsMap[subKey]) {
+        subGroupPlotsMap[subKey].forEach(plot => {
+          plot.color = newColor;
+          if (plot.layer.setStyle) {
+            plot.layer.setStyle({ color: newColor, fillColor: newColor });
+          }
+          // อัปเดต Popup ใหม่ด้วยสีล่าสุด
+          plot.layer.bindPopup(createPopupContent(plot.name, plot.mainGroup, plot.subGroup, newColor, plot.props));
+        });
+      }
+    }
+
+    // ปุ่มสลับชุดสีทั้งหมด
     document.getElementById('changeColorsBtn').addEventListener('click', function() {
       currentPaletteIndex = (currentPaletteIndex + 1) % colorPalettes.length;
       const palette = colorPalettes[currentPaletteIndex];
@@ -326,11 +348,7 @@
           const colorIdx = Object.keys(subColorMap).length % palette.length;
           subColorMap[plot.subKey] = palette[colorIdx];
         }
-        plot.color = subColorMap[plot.subKey];
-
-        if (plot.layer.setStyle) {
-          plot.layer.setStyle({ color: plot.color, fillColor: plot.color });
-        }
+        updateSubGroupColor(plot.subKey, subColorMap[plot.subKey]);
       });
 
       buildHierarchyUI();
@@ -406,7 +424,9 @@
             <div class="node-left">
               <span class="caret caret-sub">▶</span>
               <input type="checkbox" checked class="cb-sub" data-key="${subKey}" />
-              <span class="color-dot" style="background:${subColor};"></span>
+              <!-- จุดสีสามารถคลิกเพื่อเปลี่ยนสีได้โดยตรง -->
+              <span class="color-dot" style="background:${subColor};" title="คลิกเพื่อเปลี่ยนสี" data-subkey="${subKey}"></span>
+              <input type="color" class="color-picker-input" data-subkey="${subKey}" value="${subColor}">
               <span>📁 ${subGroup}</span>
             </div>
             <span class="badge" style="font-size:10px;">${plots.length}</span>`;
@@ -422,7 +442,28 @@
             plotUl.appendChild(plotLi);
           });
 
-          subHeader.addEventListener('click', (e) => { if (e.target.tagName === 'INPUT') return; const isOpen = plotUl.style.display === 'block'; plotUl.style.display = isOpen ? 'none' : 'block'; subHeader.querySelector('.caret-sub').classList.toggle('open', !isOpen); });
+          subHeader.addEventListener('click', (e) => { 
+            if (e.target.tagName === 'INPUT' || e.target.classList.contains('color-dot')) return; 
+            const isOpen = plotUl.style.display === 'block'; 
+            plotUl.style.display = isOpen ? 'none' : 'block'; 
+            subHeader.querySelector('.caret-sub').classList.toggle('open', !isOpen); 
+          });
+
+          // ผูกอีเวนต์คลิกที่จุดสีเพื่อเปิดตัวเลือกสี
+          const colorDot = subHeader.querySelector('.color-dot');
+          const colorInput = subHeader.querySelector('.color-picker-input');
+
+          colorDot.addEventListener('click', (e) => {
+            e.stopPropagation();
+            colorInput.click();
+          });
+
+          colorInput.addEventListener('input', (e) => {
+            const newColor = e.target.value;
+            colorDot.style.backgroundColor = newColor;
+            updateSubGroupColor(subKey, newColor);
+          });
+
           subHeader.querySelector('.cb-sub').addEventListener('change', function () { 
             if (this.checked) map.addLayer(subGroupLayers[subKey]); else map.removeLayer(subGroupLayers[subKey]); 
             
