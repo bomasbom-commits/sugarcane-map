@@ -112,13 +112,16 @@
       </div>
 
       <div>
-        <!-- เพิ่มปุ่ม "เปิดทั้งหมด" ที่นี่ -->
+        <!-- หัวข้อพร้อมปุ่ม เปิดทั้งหมด และปุ่มเปลี่ยนสี -->
         <div class="tree-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">
           <span>🗂️ กลุ่มรถตัดทั้งหมด (<span id="totalPlotsCount">0</span> แปลง)</span>
-          <label style="cursor: pointer; font-size: 11px; font-weight: normal; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px solid #bbdefb; color: #0d47a1; display: inline-flex; align-items: center; gap: 4px; margin: 0;">
-            <input type="checkbox" id="selectAllGroups" checked />
-            <span id="selectAllText">เปิดทั้งหมด</span>
-          </label>
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button id="changeColorsBtn" style="cursor: pointer; font-size: 11px; background: #e8f5e9; padding: 4px 8px; border-radius: 4px; border: 1px solid #c8e6c9; color: #2e7d32; font-weight: 500;">🎨 เปลี่ยนสี</button>
+            <label style="cursor: pointer; font-size: 11px; font-weight: normal; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px solid #bbdefb; color: #0d47a1; display: inline-flex; align-items: center; gap: 4px; margin: 0;">
+              <input type="checkbox" id="selectAllGroups" checked />
+              <span id="selectAllText">เปิดทั้งหมด</span>
+            </label>
+          </div>
         </div>
         <ul id="treeContainer" class="tree-root"></ul>
       </div>
@@ -132,7 +135,6 @@
   <script src="https://unpkg.com/@tmcw/togeojson"></script>
 
   <script>
-   // แก้ไขพาร์ทให้ดึงไฟล์จากหน้าแรกสุด (Root) โดยตรง
     const kmlFiles = [
       'กลุ่ม_02.kml',
       'กลุ่ม_11.kml',
@@ -155,8 +157,15 @@
       'กลุ่ม_83.kml'
     ];
 
-    const palette = ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#43A047', '#FB8C00', '#F4511E', '#6D4C41', '#546E7A', '#00ACC1', '#D81B60', '#5E35B1', '#3949AB', '#7CB342', '#FDD835', '#00BCD4', '#9C27B0', '#E91E63', '#4CAF50', '#FF9800'];
-    const subColorMap = {};
+    // ชุดสีสำรองหลากหลายชุด สำหรับสลับเปลี่ยนสีเมื่อกดปุ่ม
+    const colorPalettes = [
+      ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#43A047', '#FB8C00', '#F4511E', '#6D4C41', '#546E7A', '#00ACC1', '#D81B60', '#5E35B1', '#3949AB', '#7CB342', '#FDD835', '#00BCD4', '#9C27B0', '#E91E63', '#4CAF50', '#FF9800'],
+      ['#FF5722', '#795548', '#607D8B', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#9E9E9E', '#795548', '#607D8B'],
+      ['#D32F2F', '#C2185B', '#7B1FA2', '#512DA8', '#303F9F', '#1976D2', '#0288D1', '#0097A7', '#00796B', '#388E3C', '#689F38', '#AFB42B', '#FBC02D', '#F57C00', '#E64A19', '#5D4037', '#616161', '#455A64'],
+      ['#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#34495e', '#16a085', '#27ae60', '#2980b9', '#8e44ad', '#2c3e50', '#f1c40f', '#e67e22', '#e74c3c', '#ecf0f1', '#95a5a6', '#d35400', '#c0392b', '#bdc3c7', '#7f8c8d']
+    ];
+    let currentPaletteIndex = 0;
+    const mainGroupColorMap = {};
 
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri World Imagery', maxZoom: 19 });
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OpenStreetMap', maxZoom: 19 });
@@ -166,6 +175,7 @@
 
     const treeData = {};
     const subGroupLayers = {}; 
+    const allLayerObjects = []; // เก็บอ้างอิงเลเยอร์ทั้งหมดเพื่อให้กดเปลี่ยนสีง่ายขึ้น
     let searchIndex = [];
     const totalBounds = L.latLngBounds([]);
 
@@ -274,13 +284,14 @@
         let plotName = props['รหัสแปลง'] || props.name || 'ไม่มีรหัส';
         if(plotName.includes('<td') || plotName.includes('<')) { plotName = 'แปลงไม่มีรหัส'; }
 
-        const subKey = `${mainGroup}:::${subGroup}`;
-        if (!subColorMap[subKey]) {
-          const colorIdx = Object.keys(subColorMap).length % palette.length;
-          subColorMap[subKey] = palette[colorIdx];
+        if (!mainGroupColorMap[mainGroup]) {
+          const palette = colorPalettes[currentPaletteIndex];
+          const colorIdx = Object.keys(mainGroupColorMap).length % palette.length;
+          mainGroupColorMap[mainGroup] = palette[colorIdx];
         }
-        const color = subColorMap[subKey];
+        const color = mainGroupColorMap[mainGroup];
 
+        const subKey = `${mainGroup}:::${subGroup}`;
         if (!subGroupLayers[subKey]) subGroupLayers[subKey] = L.layerGroup().addTo(map);
 
         const layer = L.geoJSON(feature, {
@@ -296,13 +307,39 @@
 
         const plotObj = { name: plotName, mainGroup: mainGroup, subGroup: subGroup, subKey: subKey, layer: layer, color: color, props: props };
         treeData[mainGroup][subGroup].push(plotObj);
+        allLayerObjects.push(plotObj);
         searchIndex.push(plotObj);
 
         if (layer.getBounds && layer.getBounds().isValid()) totalBounds.extend(layer.getBounds());
       });
     }
 
-    // ฟังก์ชันซิงค์สถานะปุ่ม เลือกทั้งหมด/ยกเลิกทั้งหมด
+    // ฟังก์ชันปุ่มกดสลับเปลี่ยนชุดสี
+    document.getElementById('changeColorsBtn').addEventListener('click', function() {
+      currentPaletteIndex = (currentPaletteIndex + 1) % colorPalettes.length;
+      const palette = colorPalettes[currentPaletteIndex];
+      
+      // ล้างตารางสีเก่า
+      for (const k in mainGroupColorMap) delete mainGroupColorMap[k];
+
+      // คำนวณสีใหม่ให้แต่ละกลุ่ม
+      allLayerObjects.forEach(plot => {
+        if (!mainGroupColorMap[plot.mainGroup]) {
+          const colorIdx = Object.keys(mainGroupColorMap).length % palette.length;
+          mainGroupColorMap[plot.mainGroup] = palette[colorIdx];
+        }
+        plot.color = mainGroupColorMap[plot.mainGroup];
+
+        // อัปเดตสีของ Layer บนแผนที่
+        if (plot.layer.setStyle) {
+          plot.layer.setStyle({ color: plot.color, fillColor: plot.color });
+        }
+      });
+
+      // อัปเดตสีไอคอนจุดสีใน Sidebar เมนูด้านข้างใหม่
+      buildHierarchyUI();
+    });
+
     function syncSelectAllBtn() {
       const allCbGroups = document.querySelectorAll('.cb-group');
       if (allCbGroups.length === 0) return;
@@ -315,15 +352,12 @@
       }
     }
 
-    // ฟังก์ชัน Event ลบ/เพิ่ม Layer จากปุ่มเปิดทั้งหมด
     document.getElementById('selectAllGroups').addEventListener('change', function() {
       const isChecked = this.checked;
       document.getElementById('selectAllText').innerText = isChecked ? 'เปิดทั้งหมด' : 'ปิดทั้งหมด';
       
-      // อัปเดต Checkbox ทุกตัว
       document.querySelectorAll('.cb-group, .cb-sub').forEach(cb => { cb.checked = isChecked; });
 
-      // อัปเดต Layer บนแผนที่
       Object.keys(subGroupLayers).forEach(key => {
         if (isChecked) {
           if (!map.hasLayer(subGroupLayers[key])) map.addLayer(subGroupLayers[key]);
@@ -346,11 +380,20 @@
         Object.keys(subGroups).forEach(sub => { groupPlotCount += subGroups[sub].length; });
         totalPlots += groupPlotCount;
 
+        const mainColor = mainGroupColorMap[mainGroup] || '#1565C0';
+
         const groupLi = document.createElement('li');
         groupLi.className = 'group-node';
         const groupHeader = document.createElement('div');
         groupHeader.className = 'group-header';
-        groupHeader.innerHTML = `<div class="node-left"><span class="caret">▶</span><input type="checkbox" checked class="cb-group" data-group="${mainGroup}" /><span>📁 ${mainGroup}</span></div><span class="badge badge-group">${groupPlotCount}</span>`;
+        groupHeader.innerHTML = `
+          <div class="node-left">
+            <span class="caret">▶</span>
+            <input type="checkbox" checked class="cb-group" data-group="${mainGroup}" />
+            <span class="color-dot" style="background:${mainColor};"></span>
+            <span>📁 ${mainGroup}</span>
+          </div>
+          <span class="badge badge-group">${groupPlotCount}</span>`;
 
         const subUl = document.createElement('ul');
         subUl.className = 'sub-list';
@@ -360,13 +403,19 @@
         sortedSubGroups.forEach(subGroup => {
           const plots = subGroups[subGroup];
           const subKey = `${mainGroup}:::${subGroup}`;
-          const color = subColorMap[subKey];
 
           const subLi = document.createElement('li');
           subLi.className = 'sub-node';
           const subHeader = document.createElement('div');
           subHeader.className = 'sub-header';
-          subHeader.innerHTML = `<div class="node-left"><span class="caret caret-sub">▶</span><input type="checkbox" checked class="cb-sub" data-key="${subKey}" /><span class="color-dot" style="background:${color};"></span><span>📁 ${subGroup}</span></div><span class="badge" style="font-size:10px;">${plots.length}</span>`;
+          subHeader.innerHTML = `
+            <div class="node-left">
+              <span class="caret caret-sub">▶</span>
+              <input type="checkbox" checked class="cb-sub" data-key="${subKey}" />
+              <span class="color-dot" style="background:${mainColor};"></span>
+              <span>📁 ${subGroup}</span>
+            </div>
+            <span class="badge" style="font-size:10px;">${plots.length}</span>`;
 
           const plotUl = document.createElement('ul');
           plotUl.className = 'plot-list';
@@ -383,7 +432,6 @@
           subHeader.querySelector('.cb-sub').addEventListener('change', function () { 
             if (this.checked) map.addLayer(subGroupLayers[subKey]); else map.removeLayer(subGroupLayers[subKey]); 
             
-            // เช็คว่าถ้ากลุ่มย่อยถูกติ๊กออกหมด กลุ่มหลักก็ควรเอาติ๊กออกด้วย (เพื่อความสมจริง)
             const allSubs = Array.from(subUl.querySelectorAll('.cb-sub'));
             const anySubChecked = allSubs.some(cb => cb.checked);
             groupHeader.querySelector('.cb-group').checked = anySubChecked;
@@ -415,7 +463,7 @@
       if (!map.hasLayer(subGroupLayers[subKey])) { 
         map.addLayer(subGroupLayers[subKey]); 
         const cb = document.querySelector(`input[data-key="${subKey}"]`); 
-        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')); } // ให้ทริกเกอร์อีเวนต์เพื่ออัปเดตปุ่มแม่
+        if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change')); }
       }
       if (layer.getBounds && layer.getBounds().isValid()) { map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 18 }); } else if (layer.getLatLng) { map.setView(layer.getLatLng(), 18); }
       layer.openPopup();
