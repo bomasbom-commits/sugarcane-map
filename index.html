@@ -112,16 +112,12 @@
       </div>
 
       <div>
-        <!-- หัวข้อพร้อมปุ่ม เปิดทั้งหมด และปุ่มเปลี่ยนสี -->
         <div class="tree-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px;">
           <span>🗂️ กลุ่มรถตัดทั้งหมด (<span id="totalPlotsCount">0</span> แปลง)</span>
-          <div style="display: flex; gap: 4px; align-items: center;">
-            <button id="changeColorsBtn" style="cursor: pointer; font-size: 11px; background: #e8f5e9; padding: 4px 8px; border-radius: 4px; border: 1px solid #c8e6c9; color: #2e7d32; font-weight: 500;">🎨 เปลี่ยนสี</button>
-            <label style="cursor: pointer; font-size: 11px; font-weight: normal; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px solid #bbdefb; color: #0d47a1; display: inline-flex; align-items: center; gap: 4px; margin: 0;">
-              <input type="checkbox" id="selectAllGroups" checked />
-              <span id="selectAllText">เปิดทั้งหมด</span>
-            </label>
-          </div>
+          <label style="cursor: pointer; font-size: 11px; font-weight: normal; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px solid #bbdefb; color: #0d47a1; display: inline-flex; align-items: center; gap: 4px; margin: 0;">
+            <input type="checkbox" id="selectAllGroups" checked />
+            <span id="selectAllText">เปิดทั้งหมด</span>
+          </label>
         </div>
         <ul id="treeContainer" class="tree-root"></ul>
       </div>
@@ -157,14 +153,16 @@
       'กลุ่ม_83.kml'
     ];
 
-    // ชุดสีสำรองหลากหลายชุด สำหรับสลับเปลี่ยนสีเมื่อกดปุ่ม
-    const colorPalettes = [
-      ['#E53935', '#8E24AA', '#1E88E5', '#00897B', '#43A047', '#FB8C00', '#F4511E', '#6D4C41', '#546E7A', '#00ACC1', '#D81B60', '#5E35B1', '#3949AB', '#7CB342', '#FDD835', '#00BCD4', '#9C27B0', '#E91E63', '#4CAF50', '#FF9800'],
-      ['#FF5722', '#795548', '#607D8B', '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#00BCD4', '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#9E9E9E', '#795548', '#607D8B'],
-      ['#D32F2F', '#C2185B', '#7B1FA2', '#512DA8', '#303F9F', '#1976D2', '#0288D1', '#0097A7', '#00796B', '#388E3C', '#689F38', '#AFB42B', '#FBC02D', '#F57C00', '#E64A19', '#5D4037', '#616161', '#455A64'],
-      ['#1abc9c', '#2ecc71', '#3498db', '#9b59b6', '#34495e', '#16a085', '#27ae60', '#2980b9', '#8e44ad', '#2c3e50', '#f1c40f', '#e67e22', '#e74c3c', '#ecf0f1', '#95a5a6', '#d35400', '#c0392b', '#bdc3c7', '#7f8c8d']
+    // จานสีที่คัดสรรมาให้สีตัดกันชัดเจนและไม่ซ้ำกัน (มีมากกว่า 19 สี รองรับทุกกลุ่ม)
+    const palette = [
+      '#E53935', '#8E24AA', '#1E88E5', '#00897B', '#43A047', 
+      '#FB8C00', '#F4511E', '#6D4C41', '#546E7A', '#00ACC1', 
+      '#D81B60', '#5E35B1', '#3949AB', '#7CB342', '#FDD835', 
+      '#00BCD4', '#9C27B0', '#E91E63', '#4CAF50', '#FF9800',
+      '#00838F', '#283593', '#AD1457', '#C2185B', '#6A1B9A'
     ];
-    let currentPaletteIndex = 0;
+    
+    // ตารางแม็ปสีแยกตาม "กลุ่มคิวหลัก" เพื่อให้แต่ละกลุ่มคิวมีสีแน่นอนและไม่ซ้ำกัน
     const mainGroupColorMap = {};
 
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri World Imagery', maxZoom: 19 });
@@ -175,7 +173,6 @@
 
     const treeData = {};
     const subGroupLayers = {}; 
-    const allLayerObjects = []; // เก็บอ้างอิงเลเยอร์ทั้งหมดเพื่อให้กดเปลี่ยนสีง่ายขึ้น
     let searchIndex = [];
     const totalBounds = L.latLngBounds([]);
 
@@ -284,8 +281,8 @@
         let plotName = props['รหัสแปลง'] || props.name || 'ไม่มีรหัส';
         if(plotName.includes('<td') || plotName.includes('<')) { plotName = 'แปลงไม่มีรหัส'; }
 
+        // กำหนดสีประจำ "กลุ่มคิวหลัก" ไม่ให้ซ้ำกัน
         if (!mainGroupColorMap[mainGroup]) {
-          const palette = colorPalettes[currentPaletteIndex];
           const colorIdx = Object.keys(mainGroupColorMap).length % palette.length;
           mainGroupColorMap[mainGroup] = palette[colorIdx];
         }
@@ -307,38 +304,11 @@
 
         const plotObj = { name: plotName, mainGroup: mainGroup, subGroup: subGroup, subKey: subKey, layer: layer, color: color, props: props };
         treeData[mainGroup][subGroup].push(plotObj);
-        allLayerObjects.push(plotObj);
         searchIndex.push(plotObj);
 
         if (layer.getBounds && layer.getBounds().isValid()) totalBounds.extend(layer.getBounds());
       });
     }
-
-    // ฟังก์ชันปุ่มกดสลับเปลี่ยนชุดสี
-    document.getElementById('changeColorsBtn').addEventListener('click', function() {
-      currentPaletteIndex = (currentPaletteIndex + 1) % colorPalettes.length;
-      const palette = colorPalettes[currentPaletteIndex];
-      
-      // ล้างตารางสีเก่า
-      for (const k in mainGroupColorMap) delete mainGroupColorMap[k];
-
-      // คำนวณสีใหม่ให้แต่ละกลุ่ม
-      allLayerObjects.forEach(plot => {
-        if (!mainGroupColorMap[plot.mainGroup]) {
-          const colorIdx = Object.keys(mainGroupColorMap).length % palette.length;
-          mainGroupColorMap[plot.mainGroup] = palette[colorIdx];
-        }
-        plot.color = mainGroupColorMap[plot.mainGroup];
-
-        // อัปเดตสีของ Layer บนแผนที่
-        if (plot.layer.setStyle) {
-          plot.layer.setStyle({ color: plot.color, fillColor: plot.color });
-        }
-      });
-
-      // อัปเดตสีไอคอนจุดสีใน Sidebar เมนูด้านข้างใหม่
-      buildHierarchyUI();
-    });
 
     function syncSelectAllBtn() {
       const allCbGroups = document.querySelectorAll('.cb-group');
